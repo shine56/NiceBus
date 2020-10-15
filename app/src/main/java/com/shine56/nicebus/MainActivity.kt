@@ -2,6 +2,7 @@ package com.shine56.nicebus
 
 import android.Manifest
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -11,9 +12,8 @@ import com.baidu.location.BDAbstractLocationListener
 import com.baidu.location.BDLocation
 import com.baidu.location.LocationClient
 import com.baidu.location.LocationClientOption
-import com.baidu.mapapi.map.BaiduMap
-import com.baidu.mapapi.map.MapView
-import com.baidu.mapapi.map.MyLocationData
+import com.baidu.mapapi.map.*
+import com.baidu.mapapi.model.LatLng
 
 
 class MainActivity : AppCompatActivity() {
@@ -22,18 +22,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mBaiduMap: BaiduMap
     private  val mLocationClient by lazy { LocationClient(this) }
 
+    // 是否是第一次定位
+    private var isFirstLocate = true
+
+    // 当前定位模式
+    private val locationMode: MyLocationConfiguration.LocationMode? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         mMapView = findViewById(R.id.bmapView)
         mBaiduMap = mMapView.map
-        mBaiduMap.setMyLocationEnabled(true)
 
 
         request()
-        //定位初始化
-
+        mBaiduMap.setMyLocationEnabled(true)
         //通过LocationClientOption设置LocationClient相关参数
         val option = LocationClientOption()
         option.isOpenGps = true // 打开gps
@@ -51,6 +55,84 @@ class MainActivity : AppCompatActivity() {
 
         //开启地图定位图层
         mLocationClient.start()
+    }
+
+
+
+    inner class MyLocationListener : BDAbstractLocationListener() {
+        override fun onReceiveLocation(location: BDLocation) {
+            if (location == null || mMapView == null){
+                return
+            }
+            // 如果是第一次定位
+            val ll = LatLng(location.latitude, location.longitude)
+            if (isFirstLocate) {
+                isFirstLocate = false
+                //给地图设置状态
+                mBaiduMap.animateMapStatus(MapStatusUpdateFactory.newLatLng(ll))
+            }
+
+            val locData = MyLocationData.Builder()
+                .accuracy(location.radius) // 此处设置开发者获取到的方向信息，顺时针0-360
+                .direction(location.direction).latitude(location.latitude)
+                .longitude(location.longitude).build()
+            mBaiduMap.setMyLocationData(locData)
+
+            // 显示当前信息
+
+            // 显示当前信息
+            val stringBuilder = StringBuilder()
+            stringBuilder.append(
+                """
+                    
+                    经度：${location.latitude}
+                    """.trimIndent()
+            )
+            stringBuilder.append(
+                """
+                    
+                    纬度：${location.longitude}
+                    """.trimIndent()
+            )
+            stringBuilder.append(
+                """
+                    
+                    状态码：${location.locType}
+                    """.trimIndent()
+            )
+            stringBuilder.append(
+                """
+                    
+                    国家：${location.country}
+                    """.trimIndent()
+            )
+            stringBuilder.append(
+                """
+                    
+                    城市：${location.city}
+                    """.trimIndent()
+            )
+            stringBuilder.append(
+                """
+                    
+                    区：${location.district}
+                    """.trimIndent()
+            )
+            stringBuilder.append(
+                """
+                    
+                    街道：${location.street}
+                    """.trimIndent()
+            )
+            stringBuilder.append(
+                """
+                    
+                    地址：${location.addrStr}
+                    """.trimIndent()
+            )
+
+            Log.d("调试", "onReceiveLocation: ${stringBuilder.toString()}")
+        }
     }
 
     private fun request(){
@@ -84,19 +166,5 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         //在activity执行onDestroy时执行mMapView.onDestroy()，实现地图生命周期管理
 
-    }
-
-    inner class MyLocationListener : BDAbstractLocationListener() {
-        override fun onReceiveLocation(location: BDLocation) {
-            //mapView 销毁后不在处理新接收的位置
-            if (location == null || mMapView == null) {
-                return
-            }
-            val locData = MyLocationData.Builder()
-                .accuracy(location.radius) // 此处设置开发者获取到的方向信息，顺时针0-360
-                .direction(location.direction).latitude(location.latitude)
-                .longitude(location.longitude).build()
-            mBaiduMap.setMyLocationData(locData)
-        }
     }
 }
