@@ -11,7 +11,7 @@ object PhotoUtil {
      * @param newHeight Float
      * @return Bitmap
      */
-    fun zoomPhoto(bitmap: Bitmap, newWidth: Float = 50f, newHeight: Float = 50f): Bitmap {
+    fun zoomPhoto(bitmap: Bitmap, newWidth: Float = 120f, newHeight: Float = 80f): Bitmap {
         val width: Int = bitmap.getWidth()
         val height: Int = bitmap.getHeight()
 

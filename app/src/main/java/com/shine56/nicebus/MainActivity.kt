@@ -1,11 +1,13 @@
 package com.shine56.nicebus
 
 import android.Manifest
-import android.R.attr
-import android.graphics.Bitmap
-import android.graphics.Matrix
+import android.app.Dialog
 import android.os.Bundle
-import android.widget.Toast
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.WindowManager
+import android.widget.ImageView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -19,9 +21,12 @@ import com.baidu.location.LocationClientOption
 import com.baidu.mapapi.map.*
 import com.baidu.mapapi.map.BaiduMap.OnMapClickListener
 import com.baidu.mapapi.model.LatLng
+import com.shine56.nicebus.model.Bus
 import com.shine56.nicebus.util.PhotoUtil
 import com.shine56.nicebus.util.logD
 import com.shine56.nicebus.util.toast
+import java.text.SimpleDateFormat
+import java.util.*
 
 
 class MainActivity : AppCompatActivity() {
@@ -30,6 +35,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mMapView : MapView
     private lateinit var mBaiduMap: BaiduMap
     private  val mLocationClient by lazy { LocationClient(this) }
+    private lateinit var busInfoTv: TextView
+    private lateinit var busInfoDialog: Dialog
 
     // 是否是第一次定位
     private var isFirstLocate = true
@@ -45,12 +52,17 @@ class MainActivity : AppCompatActivity() {
 
         //请求权限
         request()
+    }
 
+    private fun initView(){
         //初始化地图
         initMap()
+        initDialog()
+
+        //观察数据
+        initObserve()
 
         //刷新所有车辆
-        initObserve()
         vm.refreshData()
     }
 
@@ -59,7 +71,6 @@ class MainActivity : AppCompatActivity() {
      */
     private fun initObserve(){
         vm.busList.observe(this, Observer {
-
             if(it.status == 200 && it.data != null){
                 "校园内找到了${it.data!!.size}辆巴士".toast()
                 for(bus in it.data!!){
@@ -69,6 +80,32 @@ class MainActivity : AppCompatActivity() {
                 "没有找到校园巴士".toast()
             }
         })
+
+        vm.points.observe(this, Observer {
+            setRoute(it)
+        })
+    }
+
+    private fun initDialog(){
+        busInfoDialog = Dialog(this, R.style.BottomDialog)
+        //填充对话框的布局
+        val view = LayoutInflater.from(this)
+            .inflate(R.layout.dialog,null, false)
+        busInfoDialog.setContentView(view)
+
+        val dialogWindow = busInfoDialog.window
+        //设置Dialog从窗体底部弹出
+        dialogWindow!!.setGravity(Gravity.BOTTOM)
+        //获得窗体的属性
+        val lp = dialogWindow.attributes
+        lp.width = WindowManager.LayoutParams.MATCH_PARENT
+        dialogWindow.attributes = lp
+
+        busInfoTv = view.findViewById(R.id.dialog_text)
+        val cancel = view.findViewById<ImageView>(R.id.dialog_cancel)
+        cancel.setOnClickListener {
+            busInfoDialog.hide()
+        }
     }
 
     /**
@@ -99,29 +136,43 @@ class MainActivity : AppCompatActivity() {
 
         //设置缩放比例
         val builder = MapStatus.Builder()
-        builder.zoom(17.0f)
+        builder.zoom(18.0f)
         mBaiduMap.setMapStatus(MapStatusUpdateFactory.newMapStatus(builder.build()))
 
         //设置地图单击事件监听
-        val listener: OnMapClickListener = object : OnMapClickListener {
-            /**
-             * 地图单击事件回调函数
-             * @param point 点击的地理坐标
-             */
-            override fun onMapClick(point: LatLng) {
-                val bus = vm.isClickBus(point.longitude, point.latitude)
-            }
 
-            /**
-             * 地图内 Poi 单击事件回调函数
-             * @param mapPoi 点击的 poi 信息
-             */
-            override fun onMapPoiClick(mapPoi: MapPoi) {
-                val bus = vm.isClickBus(mapPoi.position.longitude, mapPoi.position.latitude)
-                "内部${mapPoi.name}".logD()
+        mBaiduMap.setOnMarkerClickListener(object : BaiduMap.OnMarkerClickListener {
+            //marker被点击时回调的方法
+            //若响应点击事件，返回true，否则返回false
+            //默认返回false
+            override fun onMarkerClick(marker: Marker): Boolean {
+                val bus = vm.isClickBus(marker.position.longitude, marker.position.latitude)
+                bus?.let {
+                    vm.getRoute(it.id)
+                    showDialog(bus)
+                }
+                return true
             }
-        }
-        mBaiduMap.setOnMapClickListener(listener)
+        })
+    }
+
+    /**
+     * 展示bus信息
+     * @param bus Bus
+     */
+    private fun showDialog(bus: Bus){
+        val simpleDateFormat = SimpleDateFormat("yyyy.MM.dd HH:mm:ss", Locale.SIMPLIFIED_CHINESE)
+        val date = Date(bus.time)
+        val time= simpleDateFormat.format(date)
+        val text = "车牌号：${bus.id}\n" +
+                "时间：$time\n" +
+                "速度：${bus.speed}\n" +
+                "核载人数：${bus.loadNumberOfPeople}\n" +
+                "车上人数：${bus.numberOfPeople}\n" +
+                "未带口罩人数：${bus.numberOfPeopleMasks}\n" +
+                "吸烟人数：${bus.smoking}\n"
+        busInfoDialog.show()
+        busInfoTv.text = text
     }
 
     /**
@@ -143,6 +194,21 @@ class MainActivity : AppCompatActivity() {
             .icon(bitmap)
         //在地图上添加Marker，并显示
         mBaiduMap.addOverlay(option)
+    }
+
+    /**
+     * 绘制路线
+     * @param points ArrayList<LatLng>
+     */
+    private fun setRoute(points: ArrayList<LatLng>){
+        //设置折线的属性
+        val mOverlayOptions: OverlayOptions = PolylineOptions()
+            .width(15)
+            .color(resources.getColor(R.color.routeColor))
+            .points(points)
+        //在地图上绘制折线
+        //mPloyline 折线对象
+        val mPolyline = mBaiduMap.addOverlay(mOverlayOptions)
     }
 
     /**
@@ -177,7 +243,7 @@ class MainActivity : AppCompatActivity() {
                 1
             )
         }else {
-            Toast.makeText(this,"您已经申请了权限!",Toast.LENGTH_SHORT).show();
+            initView()
         }
     }
 
@@ -199,5 +265,21 @@ class MainActivity : AppCompatActivity() {
         mMapView.onDestroy()
         super.onDestroy()
         //在activity执行onDestroy时执行mMapView.onDestroy()，实现地图生命周期管理
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if(requestCode == 1){
+            if(grantResults[0] == PERMISSION_GRANTED){
+                initView()
+            }else{
+                "您拒绝了授权。".toast()
+            }
+        }
     }
 }
