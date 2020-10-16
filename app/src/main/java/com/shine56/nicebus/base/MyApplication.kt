@@ -6,8 +6,12 @@ import com.baidu.mapapi.CoordType
 import com.baidu.mapapi.SDKInitializer
 
 class MyApplication : Application() {
+
     companion object{
         lateinit var context: Context
+        const val baseUrl = "http://123.56.160.202:8086/"
+        const val defaultLon = 113.1179210392234
+        const val defaultLat = 113.1179210392234
     }
 
     override fun onCreate() {
