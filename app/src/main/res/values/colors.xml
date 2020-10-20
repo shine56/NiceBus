@@ -4,7 +4,10 @@
     <color name="colorPrimaryDark">#3700B3</color>
     <color name="colorAccent">#03DAC5</color>
 
+    <color name="main2bg">#6200EE</color>
     <color name="routeColor">#07D5D8</color>
     <color name="dialogBg">#25303F</color>
     <color name="white">#ffffff</color>
+    <color name="black">#000</color>
+
 </resources>

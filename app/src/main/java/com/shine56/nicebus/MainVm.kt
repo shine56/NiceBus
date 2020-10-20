@@ -17,6 +17,8 @@ import kotlin.math.abs
 class MainVm: MyViewModel() {
 
     val points = MutableLiveData<ArrayList<LatLng>>()
+    var myLon: Double = 113.1126509328028
+    var myLat: Double = 27.82079577857008
 
     val busList = refreshLiveData.switchMap { liveData(viewModelScope.coroutineContext+ Dispatchers.IO) {
         val result = BusNetWork.getAllBus()
@@ -40,6 +42,18 @@ class MainVm: MyViewModel() {
                 "lon = $lon bus.lon.toDouble() = ${bus.lon.toDouble()}".logD()
                 "lat = $lat bus.lat.toDouble() = ${bus.lat.toDouble()}".logD()
                 if (lon == bus.lon.toDouble() && lat == bus.lat.toDouble()){
+                    return bus
+                }
+            }
+        }
+        return null
+    }
+
+    fun searchBus(id: String): Bus?{
+        busList.value?.data?.let {
+            for (bus in it){
+
+                if (bus.id == id){
                     return bus
                 }
             }

@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.WindowManager
+import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -19,7 +21,6 @@ import com.baidu.location.BDLocation
 import com.baidu.location.LocationClient
 import com.baidu.location.LocationClientOption
 import com.baidu.mapapi.map.*
-import com.baidu.mapapi.map.BaiduMap.OnMapClickListener
 import com.baidu.mapapi.model.LatLng
 import com.shine56.nicebus.model.Bus
 import com.shine56.nicebus.util.PhotoUtil
@@ -49,6 +50,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         vm = ViewModelProvider(this)[MainVm::class.java]
+        mMapView = findViewById(R.id.bmapView)
+        mBaiduMap = mMapView.map
 
         //请求权限
         request()
@@ -64,6 +67,24 @@ class MainActivity : AppCompatActivity() {
 
         //刷新所有车辆
         vm.refreshData()
+
+        val searchBt = findViewById<Button>(R.id.search_start)
+        val searchEdit = findViewById<EditText>(R.id.search_edit)
+        searchBt.setOnClickListener {
+            val id = searchEdit.text.toString()
+            val bus = vm.searchBus(id)
+
+            if(bus == null){
+                "没有找到车辆".toast()
+            }else{
+                setLocation(bus.lon.toDouble(), bus.lat.toDouble())
+            }
+        }
+
+         findViewById<ImageView>(R.id.myLocation)
+            .setOnClickListener {
+                setLocation()
+            }
     }
 
     /**
@@ -82,41 +103,24 @@ class MainActivity : AppCompatActivity() {
         })
 
         vm.points.observe(this, Observer {
-            setRoute(it)
+//            it.size.toString().logD("路线")
+//            for (item in it){
+//                "${item.latitude} + ${item.longitude}".logD()
+//            }
+            if(it.size > 0) {
+                setRoute(it)
+            }else{
+                "没有找到该车的路线".toast()
+            }
         })
-    }
-
-    private fun initDialog(){
-        busInfoDialog = Dialog(this, R.style.BottomDialog)
-        //填充对话框的布局
-        val view = LayoutInflater.from(this)
-            .inflate(R.layout.dialog,null, false)
-        busInfoDialog.setContentView(view)
-
-        val dialogWindow = busInfoDialog.window
-        //设置Dialog从窗体底部弹出
-        dialogWindow!!.setGravity(Gravity.BOTTOM)
-        //获得窗体的属性
-        val lp = dialogWindow.attributes
-        lp.width = WindowManager.LayoutParams.MATCH_PARENT
-        dialogWindow.attributes = lp
-
-        busInfoTv = view.findViewById(R.id.dialog_text)
-        val cancel = view.findViewById<ImageView>(R.id.dialog_cancel)
-        cancel.setOnClickListener {
-            busInfoDialog.hide()
-        }
     }
 
     /**
      * 初始化地图
      */
     private fun initMap(){
-        //控件
-        mMapView = findViewById(R.id.bmapView)
-        mBaiduMap = mMapView.map
-
-        //定位
+        //默认定位
+        setLocation()
         //开启地图的定位图层
         mBaiduMap.setMyLocationEnabled(true)
         //通过LocationClientOption设置LocationClient相关参数
@@ -140,20 +144,23 @@ class MainActivity : AppCompatActivity() {
         mBaiduMap.setMapStatus(MapStatusUpdateFactory.newMapStatus(builder.build()))
 
         //设置地图单击事件监听
-
-        mBaiduMap.setOnMarkerClickListener(object : BaiduMap.OnMarkerClickListener {
+        mBaiduMap.setOnMarkerClickListener { marker ->
             //marker被点击时回调的方法
             //若响应点击事件，返回true，否则返回false
             //默认返回false
-            override fun onMarkerClick(marker: Marker): Boolean {
-                val bus = vm.isClickBus(marker.position.longitude, marker.position.latitude)
-                bus?.let {
-                    vm.getRoute(it.id)
-                    showDialog(bus)
-                }
-                return true
+            val bus = vm.isClickBus(marker.position.longitude, marker.position.latitude)
+            bus?.let {
+                vm.getRoute(it.id)
+                showDialog(bus)
             }
-        })
+            true
+        }
+
+        //设置Polyline点击监听器
+        mBaiduMap.setOnPolylineClickListener{
+            it.remove()
+            true
+        }
     }
 
     /**
@@ -208,7 +215,9 @@ class MainActivity : AppCompatActivity() {
             .points(points)
         //在地图上绘制折线
         //mPloyline 折线对象
-        val mPolyline = mBaiduMap.addOverlay(mOverlayOptions)
+        //if(!mPolyline.isRemoved) mPolyline.remove()
+        //mPolyline = mBaiduMap.addOverlay(mOverlayOptions)
+        mBaiduMap.addOverlay(mOverlayOptions)
     }
 
     /**
@@ -229,22 +238,52 @@ class MainActivity : AppCompatActivity() {
 
             val locData = MyLocationData.Builder()
                 .accuracy(location.radius) // 此处设置开发者获取到的方向信息，顺时针0-360
-                .direction(location.direction).latitude(location.latitude)
+                .direction(location.direction)
+                .latitude(location.latitude)
                 .longitude(location.longitude).build()
             mBaiduMap.setMyLocationData(locData)
+
+            vm.myLat = location.latitude
+            vm.myLon = location.longitude
         }
     }
 
+    /**
+     * 设置定位
+     * @param lon Double
+     * @param lat Double
+     */
+    private fun setLocation(lon: Double = vm.myLon, lat: Double = vm.myLat){
+//        val location = BDLocation()
+//        location.longitude = lon
+//        location.latitude = lat
+//        val locData = MyLocationData.Builder()
+//            .accuracy(location.radius) // 此处设置开发者获取到的方向信息，顺时针0-360
+//            .direction(location.direction)
+//            .latitude(location.latitude)
+//            .longitude(location.longitude).build()
+        val ll = LatLng(lat, lon)
+        val status1 = MapStatusUpdateFactory.newLatLng(ll)
+        mBaiduMap.setMapStatus(status1)
+    }
+
     private fun request(){
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                1
-            )
-        }else {
-            initView()
+        val permissions = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        )
+        var hasPermission = true
+        for (str in permissions){
+            if (ContextCompat.checkSelfPermission(this, str) != PERMISSION_GRANTED) {
+                hasPermission = false
+            }
         }
+        if(hasPermission){
+            initView()
+        }else{
+            ActivityCompat.requestPermissions(this,permissions,1)
+        }
+
     }
 
     override fun onResume() {
@@ -275,11 +314,35 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         if(requestCode == 1){
-            if(grantResults[0] == PERMISSION_GRANTED){
-                initView()
-            }else{
-                "您拒绝了授权。".toast()
+            var isOK = true
+            for (item in grantResults){
+                if(item != PERMISSION_GRANTED){
+                    "您拒绝了授权。".toast()
+                    isOK = false
+                }
             }
+            if (isOK) initView()
+        }
+    }
+    private fun initDialog(){
+        busInfoDialog = Dialog(this, R.style.BottomDialog)
+        //填充对话框的布局
+        val view = LayoutInflater.from(this)
+            .inflate(R.layout.dialog,null, false)
+        busInfoDialog.setContentView(view)
+
+        val dialogWindow = busInfoDialog.window
+        //设置Dialog从窗体底部弹出
+        dialogWindow!!.setGravity(Gravity.BOTTOM)
+        //获得窗体的属性
+        val lp = dialogWindow.attributes
+        lp.width = WindowManager.LayoutParams.MATCH_PARENT
+        dialogWindow.attributes = lp
+
+        busInfoTv = view.findViewById(R.id.dialog_text)
+        val cancel = view.findViewById<ImageView>(R.id.dialog_cancel)
+        cancel.setOnClickListener {
+            busInfoDialog.hide()
         }
     }
 }
